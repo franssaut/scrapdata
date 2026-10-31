@@ -405,6 +405,62 @@ class CiptaGroupHandler(http.server.SimpleHTTPRequestHandler):
         self.send_json(404, {"error": "Endpoint tidak ditemukan"})
 
 
+# Vercel Serverless Entrypoint (WSGI)
+def app(environ, start_response):
+    path = environ.get("PATH_INFO", "/")
+    if path == "/api/data":
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, "rb") as f:
+                content = f.read()
+            start_response("200 OK", [
+                ("Content-Type", "application/json; charset=utf-8"),
+                ("Access-Control-Allow-Origin", "*"),
+                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+            ])
+            return [content]
+    elif path == "/api/status":
+        start_response("200 OK", [
+            ("Content-Type", "application/json; charset=utf-8"),
+            ("Access-Control-Allow-Origin", "*"),
+        ])
+        return [json.dumps(scraping_state).encode("utf-8")]
+    elif path == "/api/history":
+        history = load_history()
+        start_response("200 OK", [
+            ("Content-Type", "application/json; charset=utf-8"),
+            ("Access-Control-Allow-Origin", "*"),
+        ])
+        return [json.dumps(history).encode("utf-8")]
+
+    # Serve static assets
+    clean_path = path.lstrip("/").split("?")[0] or "index.html"
+    filepath = os.path.join(BASE_DIR, clean_path)
+    if not os.path.exists(filepath) or os.path.isdir(filepath):
+        filepath = os.path.join(BASE_DIR, "index.html")
+
+    content_type = "text/html; charset=utf-8"
+    if filepath.endswith(".js"): content_type = "application/javascript; charset=utf-8"
+    elif filepath.endswith(".css"): content_type = "text/css; charset=utf-8"
+    elif filepath.endswith(".json"): content_type = "application/json; charset=utf-8"
+    elif filepath.endswith(".csv"): content_type = "text/csv; charset=utf-8"
+
+    try:
+        with open(filepath, "rb") as f:
+            body = f.read()
+        start_response("200 OK", [
+            ("Content-Type", content_type),
+            ("Access-Control-Allow-Origin", "*"),
+        ])
+        return [body]
+    except Exception:
+        start_response("404 Not Found", [("Content-Type", "text/plain")])
+        return [b"Not Found"]
+
+
+application = app
+handler = app
+
+
 def find_available_port(start_port=8000, max_attempts=20):
     import socket
     for port in range(start_port, start_port + max_attempts):
