@@ -50,12 +50,30 @@ Bot Telegram interaktif yang memungkinkan pengguna mengakses seluruh data proper
 
 ### 2. Jalankan Bot
 
-#### Cara A: Menggunakan Argumen CLI Langsung
+#### Cara A: Menjalankan di Background dengan PM2 (Direkomendasikan)
+PM2 menjaga bot tetap aktif 24/7 di latar belakang dan otomatis me-restart jika terjadi error:
+
+```bash
+# Pastikan token sudah diisi di bot_config.json, lalu:
+pm2 start ecosystem.config.js --only cipta-bot
+
+# Melihat status bot:
+pm2 status
+
+# Melihat log aktivitas bot secara real-time:
+pm2 logs cipta-bot
+
+# Me-restart atau menghentikan bot:
+pm2 restart cipta-bot
+pm2 stop cipta-bot
+```
+
+#### Cara B: Menggunakan Argumen CLI Langsung
 ```bash
 python bot.py --token 7123456789:ABCdefGhIjk...
 ```
 
-#### Cara B: Menggunakan File `bot_config.json`
+#### Cara C: Menggunakan File `bot_config.json`
 Buka file [`bot_config.json`](file:///c:/Users/user/Music/scraping/bot_config.json) dan masukkan token Anda:
 ```json
 {
@@ -67,7 +85,7 @@ Lalu jalankan:
 python bot.py
 ```
 
-#### Cara C: Uji Coba Logika Tanpa Token (Test Mode)
+#### Cara D: Uji Coba Logika Tanpa Token (Test Mode)
 ```bash
 python bot.py --test
 ```
