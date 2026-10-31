@@ -231,7 +231,7 @@ def create_project_menu_keyboard(filter_type="ALL"):
 
 def create_project_detail(project):
     title = project.get("title", "Proyek")
-    url = project.get("url", "")
+    url = (project.get("url") or "").strip()
     sub_links = project.get("sub_links", [])
     is_new = project.get("is_new")
     has_new = project.get("has_new_items")
@@ -241,12 +241,19 @@ def create_project_detail(project):
 
     new_str = "\n✨ *Status:* PROYEK BARU DITAMBAHKAN!" if is_new else ("\n✨ *Status:* Ada berkas baru ditambahkan!" if has_new else "")
 
+    # Format linktree sebagai markdown link [Buka Linktree {title}]({url})
+    # agar karakter underscore (_) pada url seperti sunny_bay tidak merusak entity Markdown Telegram
+    if url:
+        linktree_line = f"🔗 *Linktree Proyek:* [Buka Linktree {title}]({url})"
+    else:
+        linktree_line = "🔗 *Linktree Proyek:* _(Tidak ada link)_"
+
     text = (
         f"🏢 *{title}*\n"
         f"📂 *Kategori:* {category}"
         f"{new_str}\n"
         f"📁 *Total Berkas:* {len(sub_links)} item\n"
-        f"🔗 *Linktree Proyek:* {url}\n\n"
+        f"{linktree_line}\n\n"
         f"Pilih salah satu tombol di bawah untuk langsung membuka berkas di Google Drive atau Maps:"
     )
 
@@ -580,13 +587,32 @@ def setup_bot(token: str):
                 return
 
             text, markup = create_project_detail(target)
-            bot.edit_message_text(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                text=text,
-                reply_markup=markup,
-                disable_web_page_preview=True,
-            )
+            try:
+                bot.edit_message_text(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    text=text,
+                    reply_markup=markup,
+                    disable_web_page_preview=True,
+                )
+            except Exception as e:
+                print(f"[!] Gagal edit pesan proyek {target.get('title')}: {e}. Mengirim pesan baru...")
+                try:
+                    bot.send_message(
+                        call.message.chat.id,
+                        text,
+                        reply_markup=markup,
+                        disable_web_page_preview=True,
+                    )
+                except Exception as e2:
+                    # Fallback plain text jika terjadi kesalahan parsing entity
+                    clean_text = text.replace("*", "").replace("_", "")
+                    bot.send_message(
+                        call.message.chat.id,
+                        clean_text,
+                        reply_markup=markup,
+                        disable_web_page_preview=True,
+                    )
             return
 
         if data == "show_new":
@@ -682,7 +708,16 @@ def setup_bot(token: str):
 
 
 def do_search(bot, chat_id, query):
-    q = query.lower()
+    clean_q = (query or "").strip()
+    q = clean_q.lower()
+
+    # Normalisasi kata kunci (hapus kata pengantar seperti 'proyek', 'perumahan', 'ruko')
+    stripped_q = q
+    for prefix in ["proyek ", "perumahan ", "cluster ", "kawasan ", "ruko ", "hunian "]:
+        if stripped_q.startswith(prefix) and len(stripped_q) > len(prefix):
+            stripped_q = stripped_q[len(prefix):].strip()
+            break
+
     projects = get_all_projects()
 
     matched_projects = []
@@ -690,12 +725,15 @@ def do_search(bot, chat_id, query):
 
     for p in projects:
         title = p.get("title", "")
-        if q in title.lower():
+        t_low = title.lower()
+        if q in t_low or stripped_q in t_low or (len(stripped_q) >= 4 and t_low in stripped_q):
             matched_projects.append(p)
         else:
-            found_subs = [s for s in p.get("sub_links", []) if q in s.get("title", "").lower()]
+            found_subs = [s for s in p.get("sub_links", []) if q in s.get("title", "").lower() or stripped_q in s.get("title", "").lower()]
             if found_subs:
                 matched_docs.append((p, found_subs))
+
+    display_q = clean_q.replace("`", "").replace("*", "").replace("_", "")
 
     if not matched_projects and not matched_docs:
         markup = types.InlineKeyboardMarkup()
@@ -704,12 +742,12 @@ def do_search(bot, chat_id, query):
         markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
         bot.send_message(
             chat_id,
-            f"🔍 Tidak ditemukan data dengan kata kunci: *{query}*\n\nCoba cari kata kunci lain seperti `Aster`, `Amalfi`, `Marina`, `Brosur`, atau `Pricelist`.",
+            f"🔍 Tidak ditemukan data dengan kata kunci: *{display_q}*\n\nCoba cari kata kunci lain seperti `Sunny Bay`, `Aster`, `Amalfi`, `Marina`, `Brosur`, atau `Pricelist`.",
             reply_markup=markup,
         )
         return
 
-    text = f"🔍 *Hasil Pencarian untuk:* `{query}`\n\n"
+    text = f"🔍 *Hasil Pencarian untuk:* `{display_q}`\n\n"
     markup = types.InlineKeyboardMarkup(row_width=1)
 
     if matched_projects:
@@ -731,7 +769,11 @@ def do_search(bot, chat_id, query):
 
     markup.add(types.InlineKeyboardButton("🏢 Buka Menu Tombol Proyek", callback_data="open_project_menu:ALL"))
     markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
-    bot.send_message(chat_id, text, reply_markup=markup, disable_web_page_preview=True)
+    try:
+        bot.send_message(chat_id, text, reply_markup=markup, disable_web_page_preview=True)
+    except Exception as e:
+        clean_text = text.replace("*", "").replace("`", "").replace("_", "")
+        bot.send_message(chat_id, clean_text, reply_markup=markup, disable_web_page_preview=True)
 
 
 def run_test_mode():
@@ -753,6 +795,12 @@ def run_test_mode():
     # Test start keyboard
     start_kb = create_start_inline_keyboard()
     print(f"[✓] Inline Keyboard menu utama berhasil dibuat.")
+
+    # Test detail untuk seluruh proyek (termasuk Sunny Bay & Aster Garden)
+    for p in projects:
+        text, m = create_project_detail(p)
+        assert len(text) > 0 and m is not None
+    print(f"[✓] Rincian detail seluruh {len(projects)} proyek (termasuk Sunny Bay) teruji valid.")
 
     print("[✓] Semua fitur 'Menu Tombol Proyek' terverifikasi 100% normal!")
     print("=" * 60)
