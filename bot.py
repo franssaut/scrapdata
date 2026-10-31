@@ -743,6 +743,52 @@ def run_test_mode():
     print("=" * 60)
 
 
+def run_resilient_polling(bot):
+    """
+    Menjalankan polling Telegram dengan penanganan error otomatis agar tidak crash looping:
+    - Menangani HTTP 409 Conflict (proses ganda) dengan backoff ramah
+    - Menangani timeout / disconnect internet sementara tanpa mematikan proses
+    """
+    consecutive_errors = 0
+    while True:
+        try:
+            bot.infinity_polling(timeout=20, long_polling_timeout=20, logger_level=None)
+            consecutive_errors = 0
+        except telebot.apihelper.ApiTelegramException as e:
+            consecutive_errors += 1
+            if e.error_code == 409:
+                print(f"[!] Error 409 Conflict: Bot aktif di sesi lain atau sedang reload.")
+                print(f"[!] Menunggu 10 detik agar koneksi lama terputus bersih (Percobaan {consecutive_errors})...")
+                time.sleep(10)
+            elif e.error_code in (401, 404):
+                print(f"[!] Error fatal ({e.error_code}): Token bot tidak valid.")
+                break
+            else:
+                print(f"[!] Telegram API error ({e.error_code}): {e}")
+                time.sleep(5)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            consecutive_errors += 1
+            delay = min(consecutive_errors * 2, 30)
+            print(f"[!] Jaringan terputus sementara ({e.__class__.__name__}). Menghubungkan ulang dalam {delay} detik...")
+            time.sleep(delay)
+        except Exception as e:
+            consecutive_errors += 1
+            delay = min(consecutive_errors * 3, 30)
+            print(f"[!] Polling error tak terduga: {e}. Retry dalam {delay} detik...")
+            time.sleep(delay)
+
+
+def acquire_single_instance_lock(port=49152):
+    """Mencegah dua proses bot berjalan bersamaan pada satu mesin."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(('127.0.0.1', port))
+        return s
+    except OSError:
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser(description="Bot Telegram Cipta Group Official")
     parser.add_argument("--token", "-t", help="Token Bot Telegram dari @BotFather")
@@ -752,6 +798,18 @@ def main():
     if args.test:
         run_test_mode()
         return
+
+    # Kunci single-instance
+    lock_socket = acquire_single_instance_lock()
+    if lock_socket is None:
+        print("=" * 60)
+        print("⚠️  PERINGATAN: BOT CIPTA GROUP SUDAH BERJALAN DI PROSES LAIN!")
+        print("=" * 60)
+        print("Hanya diperbolehkan 1 instance bot yang aktif secara bersamaan.")
+        print("Hal ini untuk mencegah konflik getUpdates (HTTP 409 Conflict)")
+        print("yang menyebabkan angka restart (↺) di PM2 menjadi tinggi.")
+        print("=" * 60)
+        sys.exit(0)
 
     token = args.token or get_token()
 
@@ -780,7 +838,7 @@ def main():
         print(f"👉 Silakan buka Telegram dan chat bot: https://t.me/{bot_info.username}")
         print("Bot siap menerima pesan. Tekan Ctrl + C untuk berhenti.")
         print("=" * 60)
-        bot.infinity_polling(timeout=20, long_polling_timeout=20)
+        run_resilient_polling(bot)
     except KeyboardInterrupt:
         print("\n[!] Bot dihentikan.")
     except Exception as e:
