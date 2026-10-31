@@ -3,7 +3,7 @@ const fs = require('fs');
 
 /**
  * Konfigurasi PM2 untuk Bot Telegram & Web Server Cipta Group
- * Dilengkapi pengaturan anti-restart loop (stabilitas 24/7)
+ * Dilengkapi direktori kerja tetap (cwd) & pengaturan anti-restart loop
  */
 function getPythonInterpreter() {
   const localAppData = process.env.LOCALAPPDATA || 'C:\\Users\\user\\AppData\\Local';
@@ -18,13 +18,14 @@ module.exports = {
   apps: [
     {
       name: 'cipta-bot',
-      script: 'bot.py',
+      cwd: __dirname,
+      script: path.join(__dirname, 'bot.py'),
       interpreter: getPythonInterpreter(),
       autorestart: true,
-      min_uptime: '15s',                // Waktu minimum agar dianggap stabil
-      max_restarts: 10,                 // Batasi loop restart jika terjadi error
-      restart_delay: 5000,              // Jeda 5 detik antar-restart agar koneksi Telegram bersih
-      kill_timeout: 4000,               // Waktu graceful shutdown
+      min_uptime: '15s',
+      max_restarts: 10,
+      restart_delay: 5000,
+      kill_timeout: 4000,
       watch: false,
       max_memory_restart: '250M',
       env: {
@@ -33,7 +34,8 @@ module.exports = {
     },
     {
       name: 'cipta-web',
-      script: 'app.py',
+      cwd: __dirname,
+      script: path.join(__dirname, 'app.py'),
       interpreter: getPythonInterpreter(),
       autorestart: true,
       min_uptime: '10s',

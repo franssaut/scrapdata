@@ -18,12 +18,6 @@ import threading
 import time
 from datetime import datetime
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
-
 import requests
 import telebot
 from telebot import types
@@ -34,6 +28,13 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE_DIR, "ciptagroup_deep.json")
 CSV_FILE = os.path.join(BASE_DIR, "ciptagroup_deep.csv")
 CONFIG_FILE = os.path.join(BASE_DIR, "bot_config.json")
+ENV_FILE = os.path.join(BASE_DIR, ".env")
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(ENV_FILE)
+except ImportError:
+    pass
 
 # Emoji & Tipe Berkas
 TYPE_ICONS = {
@@ -100,6 +101,20 @@ def get_token() -> str:
     if token:
         return token
 
+    # Fallback 1: Baca langsung dari file .env
+    if os.path.exists(ENV_FILE):
+        try:
+            with open(ENV_FILE, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("TELEGRAM_BOT_TOKEN="):
+                        t = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if t:
+                            return t
+        except Exception:
+            pass
+
+    # Fallback 2: Baca dari bot_config.json
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
