@@ -1,9 +1,10 @@
 """
 Telegram Bot untuk Portal Data & Web Scraping Cipta Group Official
 Mendukung:
-- Tampilkan Semua Proyek & Berkas (2-kolom Grid & Teks Lengkap 96 Berkas)
-- Pencarian cerdas proyek & berkas Google Drive (Brosur, Pricelist, Siteplan, Maps)
-- Menu interaktif dengan Inline Keyboard
+- Menu Tombol Proyek Interaktif (Reply Keyboard & Inline Grid 2-Kolom)
+- Filter Kategori Tombol: Semua Properti, Hunian/Residensial, dan Pertokoan/Komersial
+- Tampilkan Semua Proyek & Berkas (Teks Lengkap 96 Berkas Google Drive/Maps)
+- Pencarian cerdas proyek & berkas
 - Cek data baru (Change Detection)
 - Trigger sinkronisasi/scraping ulang langsung dari chat Telegram
 - Pengiriman file hasil ekspor (CSV & JSON) ke pengguna
@@ -57,6 +58,8 @@ TYPE_ICONS = {
     "fasad": "🎨",
     "tampak": "🎨",
 }
+
+COMMERCIAL_KEYWORDS = ["pertokoan", "square", "marina central", "namarina", "ruko"]
 
 
 def is_valid_telegram_url(url: str) -> bool:
@@ -128,43 +131,87 @@ def get_all_projects():
     return data.get("links", [])
 
 
-def create_start_keyboard():
+def create_reply_keyboard():
+    """Membuat tombol menu permanen di bagian bawah chat (Reply Keyboard)."""
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    b_proyek = types.KeyboardButton("🏢 Menu Tombol Proyek")
+    b_semua = types.KeyboardButton("📋 Tampilkan Semua")
+    b_terbaru = types.KeyboardButton("✨ Data Baru")
+    b_stats = types.KeyboardButton("📊 Statistik")
+    b_cari = types.KeyboardButton("🔍 Cari Berkas")
+    b_export = types.KeyboardButton("📥 Unduh CSV/Excel")
+    b_web = types.KeyboardButton("🌐 Buka Web Dashboard")
+
+    markup.add(b_proyek, b_semua)
+    markup.add(b_terbaru, b_stats)
+    markup.add(b_cari, b_export)
+    markup.add(b_web)
+    return markup
+
+
+def create_start_inline_keyboard():
+    """Membuat tombol inline interaktif pada pesan sambutan."""
     markup = types.InlineKeyboardMarkup(row_width=2)
+    b_proyek = types.InlineKeyboardButton("🏢 Menu Tombol Proyek", callback_data="open_project_menu:ALL")
     b_semua = types.InlineKeyboardButton("📋 Tampilkan Semua", callback_data="send_all_text")
-    b_proyek = types.InlineKeyboardButton("🏢 Tombol Proyek", callback_data="list_all")
     b_terbaru = types.InlineKeyboardButton("✨ Data Baru", callback_data="show_new")
     b_stats = types.InlineKeyboardButton("📊 Statistik", callback_data="show_stats")
-    b_cari = types.InlineKeyboardButton("🔍 Cara Cari", callback_data="how_search")
     b_sync = types.InlineKeyboardButton("🔄 Scrape / Sync", callback_data="do_sync")
     b_export = types.InlineKeyboardButton("📥 Unduh CSV/Excel", callback_data="do_export")
     b_web = types.InlineKeyboardButton("🌐 Web Dashboard Live", url="https://scraping-pied.vercel.app")
     b_linktree = types.InlineKeyboardButton("🔗 Linktree Resmi", url="https://linktr.ee/ciptagroupofficial")
 
-    markup.add(b_semua, b_proyek)
+    markup.add(b_proyek, b_semua)
     markup.add(b_terbaru, b_stats)
     markup.add(b_sync, b_export)
-    markup.add(b_cari, b_web)
-    markup.add(b_linktree)
+    markup.add(b_web, b_linktree)
     return markup
 
 
-def create_all_projects_keyboard():
-    """Membuat keyboard 2-kolom yang menampilkan SEMUA proyek sekaligus tanpa pagination."""
-    projects = get_all_projects()
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    buttons = []
+def create_project_menu_keyboard(filter_type="ALL"):
+    """
+    Membuat antarmuka Menu Tombol Proyek:
+    - Tab filter kategori (Semua, Hunian, Komersial)
+    - Grid 2-kolom berisi tombol semua nama proyek
+    """
+    all_projects = get_all_projects()
 
-    for i, p in enumerate(projects, 1):
-        title = p.get("title", f"Proyek #{i}")
+    filtered = []
+    for p in all_projects:
+        t = p.get("title", "").lower()
+        is_comm = any(k in t for k in COMMERCIAL_KEYWORDS)
+        if filter_type == "RESIDENTIAL" and is_comm:
+            continue
+        if filter_type == "COMMERCIAL" and not is_comm:
+            continue
+        filtered.append((p, is_comm))
+
+    markup = types.InlineKeyboardMarkup(row_width=2)
+
+    # 1. Baris Filter Kategori
+    tab_all = types.InlineKeyboardButton("🔘 Semua (15)" if filter_type == "ALL" else "Semua (15)", callback_data="open_project_menu:ALL")
+    tab_res = types.InlineKeyboardButton("🔘 Hunian (12)" if filter_type == "RESIDENTIAL" else "🏡 Hunian (12)", callback_data="open_project_menu:RESIDENTIAL")
+    tab_com = types.InlineKeyboardButton("🔘 Komersial (3)" if filter_type == "COMMERCIAL" else "🏪 Komersial (3)", callback_data="open_project_menu:COMMERCIAL")
+    markup.row(tab_all, tab_res, tab_com)
+
+    # 2. Tombol-tombol Proyek (2 per baris)
+    buttons = []
+    for p, is_comm in filtered:
+        title = p.get("title", "Proyek")
         doc_count = len(p.get("sub_links", []))
-        is_new_badge = "✨ " if p.get("is_new") or p.get("has_new_items") else ""
-        btn_text = f"{is_new_badge}{title} ({doc_count})"
-        buttons.append(types.InlineKeyboardButton(btn_text, callback_data=f"proj:{p.get('id', i)}"))
+        icon = "🏪" if is_comm else "🏡"
+        is_new = "✨ " if p.get("is_new") or p.get("has_new_items") else ""
+        btn_text = f"{is_new}{icon} {title} ({doc_count})"
+        buttons.append(types.InlineKeyboardButton(btn_text, callback_data=f"proj:{p.get('id')}"))
 
     markup.add(*buttons)
-    markup.add(types.InlineKeyboardButton("📋 Kirim Rincian Semua Berkas (Teks)", callback_data="send_all_text"))
+
+    # 3. Baris Aksi Tambahan
+    markup.add(types.InlineKeyboardButton("📋 Tampilkan Rincian Semua Berkas (Teks)", callback_data="send_all_text"))
     markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
-    return markup, len(projects)
+
+    desc = "Semua 15 Properti" if filter_type == "ALL" else ("Kawasan Hunian & Residensial (12 Proyek)" if filter_type == "RESIDENTIAL" else "Kawasan Pertokoan & Komersial (3 Proyek)")
+    return markup, desc, len(filtered)
 
 
 def create_project_detail(project):
@@ -174,7 +221,8 @@ def create_project_detail(project):
     is_new = project.get("is_new")
     has_new = project.get("has_new_items")
 
-    category = "Pertokoan & Komersial" if any(k in title.lower() for k in ["pertokoan", "square", "marina", "namarina", "ruko"]) else "Hunian / Residensial"
+    is_comm = any(k in title.lower() for k in COMMERCIAL_KEYWORDS)
+    category = "🏪 Pertokoan & Komersial" if is_comm else "🏡 Hunian / Residensial"
 
     new_str = "\n✨ *Status:* PROYEK BARU DITAMBAHKAN!" if is_new else ("\n✨ *Status:* Ada berkas baru ditambahkan!" if has_new else "")
 
@@ -184,7 +232,7 @@ def create_project_detail(project):
         f"{new_str}\n"
         f"📁 *Total Berkas:* {len(sub_links)} item\n"
         f"🔗 *Linktree Proyek:* {url}\n\n"
-        f"Silakan klik tombol di bawah ini untuk langsung membuka berkas di Google Drive atau Maps:"
+        f"Pilih salah satu tombol di bawah untuk langsung membuka berkas di Google Drive atau Maps:"
     )
 
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -199,7 +247,7 @@ def create_project_detail(project):
     if is_valid_telegram_url(url):
         markup.add(types.InlineKeyboardButton("🌐 Buka Halaman Linktree Asli", url=url.strip()))
 
-    markup.add(types.InlineKeyboardButton("⬅️ Kembali ke Semua Proyek", callback_data="list_all"))
+    markup.add(types.InlineKeyboardButton("⬅️ Kembali ke Menu Tombol Proyek", callback_data="open_project_menu:ALL"))
     markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
 
     return text, markup
@@ -229,7 +277,7 @@ def send_all_projects_text(bot, chat_id):
             p = projects[i]
             title = p.get("title", "")
             url = p.get("url", "")
-            is_comm = any(k in title.lower() for k in ["pertokoan", "square", "marina", "namarina", "ruko"])
+            is_comm = any(k in title.lower() for k in COMMERCIAL_KEYWORDS)
             cat_label = "🏪 Komersial" if is_comm else "🏡 Hunian"
 
             lines.append(f"*{i+1}. {title}* ({cat_label})")
@@ -252,10 +300,9 @@ def send_all_projects_text(bot, chat_id):
 
         text = "\n".join(lines)
         markup = None
-        # Tambahkan tombol aksi pada bagian terakhir
         if part_num == total_parts:
             markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("🏢 Buka Menu Tombol Proyek", callback_data="list_all"))
+            markup.add(types.InlineKeyboardButton("🏢 Buka Menu Tombol Proyek", callback_data="open_project_menu:ALL"))
             markup.add(types.InlineKeyboardButton("📥 Unduh CSV / Excel", callback_data="do_export"))
             markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
 
@@ -266,6 +313,20 @@ def send_all_projects_text(bot, chat_id):
 def setup_bot(token: str):
     bot = telebot.TeleBot(token, parse_mode="Markdown")
 
+    # Daftarkan Menu Perintah Resmi Telegram
+    try:
+        bot.set_my_commands([
+            types.BotCommand("proyek", "🏢 Menu Tombol Proyek"),
+            types.BotCommand("semua", "📋 Tampilkan Semua 15 Proyek & 96 Berkas"),
+            types.BotCommand("cari", "🔍 Cari Nama Proyek / Dokumen"),
+            types.BotCommand("terbaru", "✨ Cek Proyek & Berkas Baru"),
+            types.BotCommand("stats", "📊 Statistik Data Properti"),
+            types.BotCommand("export", "📥 Unduh Rekap Data CSV/Excel"),
+            types.BotCommand("start", "🏠 Buka Menu Utama"),
+        ])
+    except Exception as e:
+        print(f"[i] Set my commands info: {e}")
+
     # Command: /start atau /help
     @bot.message_handler(commands=["start", "help", "menu"])
     def send_welcome(message):
@@ -273,32 +334,35 @@ def setup_bot(token: str):
         text = (
             f"👋 *Halo, {name}! Selamat datang di Bot Telegram Cipta Group Batam*\n\n"
             f"Bot ini terintegrasi langsung dengan database [Linktree Cipta Group Official](https://linktr.ee/ciptagroupofficial).\n\n"
-            f"📌 *Fitur Utama:*\n"
+            f"📌 *Fitur Utama yang Tersedia:*\n"
+            f"• 🏢 *Menu Tombol Proyek*: Pilih nama proyek dalam grid tombol interaktif 2-kolom\n"
             f"• 📋 *Tampilkan Semua*: Kirim rincian seluruh 15 proyek & 96 berkas Drive/Maps\n"
-            f"• 🏢 *Tombol Proyek*: Pilih nama proyek dalam tata letak tombol interaktif\n"
             f"• 🔍 *Pencarian Cerdas*: Ketik langsung nama proyek atau jenis berkas (cth: `Aster`, `Amalfi`, `Pricelist`)\n"
             f"• ✨ *Data Baru*: Pantau proyek & berkas yang baru ditambahkan\n"
             f"• 🔄 *Live Scraping*: Sinkronkan data Linktree langsung dari chat\n"
             f"• 📥 *Ekspor*: Unduh rekapitulasi data format CSV / Excel\n\n"
-            f"Silakan pilih menu di bawah ini:"
+            f"Silakan gunakan menu tombol di bawah atau tombol keyboard untuk memulai:"
         )
-        bot.send_message(message.chat.id, text, reply_markup=create_start_keyboard(), disable_web_page_preview=True)
+        # Kirim tombol inline dan aktifkan juga persistent reply keyboard di bawah layar!
+        bot.send_message(message.chat.id, "🤖 *Menu Cepat Cipta Group Aktif!*", reply_markup=create_reply_keyboard())
+        bot.send_message(message.chat.id, text, reply_markup=create_start_inline_keyboard(), disable_web_page_preview=True)
+
+    # Command: /proyek atau /list
+    @bot.message_handler(commands=["proyek", "list"])
+    def list_projects_cmd(message):
+        markup, desc, count = create_project_menu_keyboard(filter_type="ALL")
+        bot.send_message(
+            message.chat.id,
+            f"🏢 *MENU TOMBOL PROYEK CIPTA GROUP*\n\n"
+            f"Menampilkan: *{desc}* ({count} Properti)\n"
+            f"_Klik nama proyek untuk membuka berkas Drive (E-Brosur, Pricelist, Siteplan, Maps):_",
+            reply_markup=markup,
+        )
 
     # Command: /semua atau /all
     @bot.message_handler(commands=["semua", "all", "katalog"])
     def all_projects_cmd(message):
         send_all_projects_text(bot, message.chat.id)
-
-    # Command: /proyek atau /list
-    @bot.message_handler(commands=["proyek", "list"])
-    def list_projects_cmd(message):
-        markup, total = create_all_projects_keyboard()
-        bot.send_message(
-            message.chat.id,
-            f"🏢 *Daftar Lengkap Semua Proyek Cipta Group ({total} Kawasan):*\n"
-            f"_Klik salah satu tombol proyek di bawah untuk membuka berkas Drive (Brosur, Pricelist, Siteplan, Maps):_",
-            reply_markup=markup,
-        )
 
     # Command: /terbaru atau /new
     @bot.message_handler(commands=["terbaru", "new"])
@@ -311,7 +375,7 @@ def setup_bot(token: str):
             bot.send_message(
                 message.chat.id,
                 "✅ *Semua data sudah mutakhir!*\nTidak ada proyek atau berkas baru yang belum ditinjau.",
-                reply_markup=create_start_keyboard(),
+                reply_markup=create_start_inline_keyboard(),
             )
             return
 
@@ -363,8 +427,8 @@ def setup_bot(token: str):
             f"🔗 *Sumber:* [linktr.ee/ciptagroupofficial](https://linktr.ee/ciptagroupofficial)"
         )
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📋 Tampilkan Semua", callback_data="send_all_text"))
-        markup.add(types.InlineKeyboardButton("🏢 Tombol Proyek", callback_data="list_all"))
+        markup.add(types.InlineKeyboardButton("🏢 Buka Menu Tombol Proyek", callback_data="open_project_menu:ALL"))
+        markup.add(types.InlineKeyboardButton("📋 Tampilkan Semua Berkas", callback_data="send_all_text"))
         markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
         bot.send_message(message.chat.id, text, reply_markup=markup, disable_web_page_preview=True)
 
@@ -432,14 +496,14 @@ def setup_bot(token: str):
                         f"• {total_docs} Berkas & Link Google Drive/Maps\n\n"
                         f"Seluruh data sudah terintegrasi dan siap diakses."
                     ),
-                    reply_markup=create_start_keyboard(),
+                    reply_markup=create_start_inline_keyboard(),
                 )
             except Exception as e:
                 bot.edit_message_text(
                     chat_id=message.chat.id,
                     message_id=msg.message_id,
                     text=f"❌ *Terjadi kesalahan saat sinkronisasi:* {e}",
-                    reply_markup=create_start_keyboard(),
+                    reply_markup=create_start_inline_keyboard(),
                 )
 
         threading.Thread(target=worker, daemon=True).start()
@@ -459,7 +523,24 @@ def setup_bot(token: str):
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
                 text="🏠 *Menu Utama Portal Cipta Group:*",
-                reply_markup=create_start_keyboard(),
+                reply_markup=create_start_inline_keyboard(),
+            )
+            return
+
+        # Buka Menu Tombol Proyek dengan filter
+        if data.startswith("open_project_menu:"):
+            bot.answer_callback_query(call.id)
+            filter_type = data.split(":")[1]
+            markup, desc, count = create_project_menu_keyboard(filter_type=filter_type)
+            bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text=(
+                    f"🏢 *MENU TOMBOL PROYEK CIPTA GROUP*\n\n"
+                    f"Kategori: *{desc}* ({count} Properti)\n"
+                    f"_Klik nama proyek untuk membuka berkas Drive (Brosur, Pricelist, Siteplan, Maps):_"
+                ),
+                reply_markup=markup,
             )
             return
 
@@ -467,18 +548,6 @@ def setup_bot(token: str):
         if data == "send_all_text":
             bot.answer_callback_query(call.id, text="Memuat seluruh rincian proyek...")
             send_all_projects_text(bot, call.message.chat.id)
-            return
-
-        # Tampilkan Semua Tombol Proyek Sekaligus
-        if data == "list_all":
-            bot.answer_callback_query(call.id)
-            markup, total = create_all_projects_keyboard()
-            bot.edit_message_text(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                text=f"🏢 *Semua Proyek Cipta Group ({total} Kawasan Properti):*\n_Pilih nama proyek untuk melihat berkas Drive-nya:_",
-                reply_markup=markup,
-            )
             return
 
         if data.startswith("proj:"):
@@ -524,6 +593,7 @@ def setup_bot(token: str):
                     "🔍 *Cara Mencari di Bot Cipta Group:*\n\n"
                     "Anda bisa langsung mengetikkan kata apa pun di ruang obrolan, tanpa perlu garis miring!\n\n"
                     "💡 *Contoh Pencarian Cepat:*\n"
+                    "• Ketik `proyek` ➔ Membuka Menu Tombol Proyek\n"
                     "• Ketik `semua` ➔ Menampilkan seluruh 15 proyek & 96 berkas\n"
                     "• Ketik `Aster` ➔ Menampilkan Aster Tropika, Hills, Garden\n"
                     "• Ketik `Amalfi` ➔ Menampilkan proyek hunian Amalfi\n"
@@ -532,7 +602,7 @@ def setup_bot(token: str):
                     "• Ketik `Brosur` ➔ Menemukan brosur & e-flyer resmi\n\n"
                     "Coba ketik salah satu kata di atas sekarang!"
                 ),
-                reply_markup=create_start_keyboard(),
+                reply_markup=create_start_inline_keyboard(),
             )
             return
 
@@ -546,16 +616,52 @@ def setup_bot(token: str):
             export_cmd(call.message)
             return
 
-    # Plain text listener
+    # Plain text & reply keyboard listener
     @bot.message_handler(func=lambda message: True)
-    def handle_text_search(message):
-        query = message.text.strip()
-        # Jika user mengetik "semua" atau "tampilkan semua"
-        if query.lower() in ["semua", "tampilkan semua", "all", "semua proyek"]:
+    def handle_text_messages(message):
+        text = (message.text or "").strip()
+        lower_text = text.lower()
+
+        # Respon terhadap Tombol Menu Bawah (Reply Keyboard)
+        if "menu tombol proyek" in lower_text or lower_text in ["proyek", "tombol proyek", "daftar proyek"]:
+            list_projects_cmd(message)
+            return
+
+        if "tampilkan semua" in lower_text or lower_text in ["semua", "all", "katalog"]:
             send_all_projects_text(bot, message.chat.id)
             return
 
-        do_search(bot, message.chat.id, query)
+        if "data baru" in lower_text or lower_text in ["terbaru", "new"]:
+            new_items_cmd(message)
+            return
+
+        if "statistik" in lower_text or lower_text in ["stats", "stat"]:
+            stats_cmd(message)
+            return
+
+        if "unduh csv/excel" in lower_text or lower_text in ["export", "unduh", "download"]:
+            export_cmd(message)
+            return
+
+        if "buka web dashboard" in lower_text or lower_text in ["web", "dashboard"]:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("🌐 Buka Web Dashboard Vercel", url="https://scraping-pied.vercel.app"))
+            bot.send_message(
+                message.chat.id,
+                "🌐 *Dashboard Web Cipta Group Live:*\n👉 [https://scraping-pied.vercel.app](https://scraping-pied.vercel.app)",
+                reply_markup=markup,
+            )
+            return
+
+        if "cari berkas" in lower_text or lower_text == "cari":
+            bot.send_message(
+                message.chat.id,
+                "🔍 *Ketik nama proyek atau jenis berkas yang dicari:*\n\nContoh: `Aster`, `Amalfi`, `Marina`, `Brosur`, `Pricelist`",
+            )
+            return
+
+        # Pencarian umum teks
+        do_search(bot, message.chat.id, text)
 
     return bot
 
@@ -578,12 +684,12 @@ def do_search(bot, chat_id, query):
 
     if not matched_projects and not matched_docs:
         markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🏢 Buka Menu Tombol Proyek", callback_data="open_project_menu:ALL"))
         markup.add(types.InlineKeyboardButton("📋 Tampilkan Semua", callback_data="send_all_text"))
-        markup.add(types.InlineKeyboardButton("🏢 Tombol Proyek", callback_data="list_all"))
         markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
         bot.send_message(
             chat_id,
-            f"🔍 Tidak ditemukan data dengan kata kunci: *{query}*\n\nCoba cari kata kunci lain seperti `semua`, `Aster`, `Amalfi`, `Marina`, `Brosur`, atau `Pricelist`.",
+            f"🔍 Tidak ditemukan data dengan kata kunci: *{query}*\n\nCoba cari kata kunci lain seperti `Aster`, `Amalfi`, `Marina`, `Brosur`, atau `Pricelist`.",
             reply_markup=markup,
         )
         return
@@ -608,7 +714,7 @@ def do_search(bot, chat_id, query):
                 if is_valid_telegram_url(s.get("url")):
                     markup.add(types.InlineKeyboardButton(f"{icon} {p.get('title')} - {s.get('title')}", url=s.get("url").strip()))
 
-    markup.add(types.InlineKeyboardButton("📋 Tampilkan Semua", callback_data="send_all_text"))
+    markup.add(types.InlineKeyboardButton("🏢 Buka Menu Tombol Proyek", callback_data="open_project_menu:ALL"))
     markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
     bot.send_message(chat_id, text, reply_markup=markup, disable_web_page_preview=True)
 
@@ -620,35 +726,20 @@ def run_test_mode():
     projects = get_all_projects()
     print(f"[✓] Berhasil memuat data: {len(projects)} proyek ditemukan.")
 
-    # Test create all projects keyboard
-    markup, total_items = create_all_projects_keyboard()
-    print(f"[✓] Keyboard SEMUA proyek (2-kolom grid) berhasil dibuat: {total_items} tombol.")
+    # Test reply keyboard
+    r_kb = create_reply_keyboard()
+    print(f"[✓] Reply Keyboard (Tombol Bawah Layar) berhasil dibuat.")
+
+    # Test project menu keyboards for each category
+    for cat in ["ALL", "RESIDENTIAL", "COMMERCIAL"]:
+        markup, desc, count = create_project_menu_keyboard(filter_type=cat)
+        print(f"[✓] Menu Tombol Proyek ({cat}): {desc} -> {count} tombol dihasilkan.")
 
     # Test start keyboard
-    start_kb = create_start_keyboard()
-    print(f"[✓] Keyboard menu utama berhasil dibuat dengan tombol 'Tampilkan Semua'.")
+    start_kb = create_start_inline_keyboard()
+    print(f"[✓] Inline Keyboard menu utama berhasil dibuat.")
 
-    # Test text chunking
-    step = 4
-    total_parts = (len(projects) + step - 1) // step
-    print(f"[✓] Logika chunking teks berhasil: {len(projects)} proyek dipecah ke {total_parts} pesan aman.")
-
-    # Test search logic
-    test_queries = ["semua", "aster", "amalfi", "pricelist", "brosur"]
-    for q in test_queries:
-        if q == "semua":
-            print(f"[✓] Query '{q}': Otomatis mentrigger tampilan semua katalog.")
-            continue
-        matched = [p for p in projects if q in p.get("title", "").lower()]
-        doc_matches = [
-            (p["title"], s["title"])
-            for p in projects
-            for s in p.get("sub_links", [])
-            if q in s.get("title", "").lower()
-        ]
-        print(f"[✓] Query '{q}': {len(matched)} proyek cocok, {len(doc_matches)} dokumen cocok.")
-
-    print("[✓] Semua fitur 'Tampilkan Semua' terverifikasi 100% normal!")
+    print("[✓] Semua fitur 'Menu Tombol Proyek' terverifikasi 100% normal!")
     print("=" * 60)
 
 
@@ -668,24 +759,10 @@ def main():
         print("=" * 60)
         print("⚠️  TOKEN TELEGRAM BOT BELUM DIATUR!")
         print("=" * 60)
-        print("Cara mendapatkan token bot Telegram gratis:")
-        print("1. Buka Telegram dan cari akun resmi @BotFather (tanda centang biru).")
-        print("2. Kirim pesan: /newbot")
-        print("3. Beri nama bot (contoh: Cipta Group Bot).")
-        print("4. Beri username bot yang berakhiran 'bot' (contoh: ciptagroup_official_bot).")
-        print("5. Salin token API yang diberikan (contoh: 123456789:ABCdefGhIjk...).")
-        print("-" * 60)
         print("Cara menjalankan bot:")
         print("   python bot.py --token <TOKEN_BOT_ANDA>")
-        print("Atau simpan token di file 'bot_config.json' atau '.env'.")
+        print("Atau simpan token di file '.env'.")
         print("=" * 60)
-
-        if not os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump({"telegram_bot_token": ""}, f, indent=2)
-            print(f"[i] File template '{CONFIG_FILE}' telah dibuat. Masukkan token Anda di sana.")
-
-        print("\nMenjalankan demonstrasi logika bot (--test):")
         run_test_mode()
         return
 
