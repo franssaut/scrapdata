@@ -6,12 +6,25 @@ const fs = require('fs');
  * Dilengkapi direktori kerja tetap (cwd) & pengaturan anti-restart loop
  */
 function getPythonInterpreter() {
+  // 1. Cek jika ada virtual environment (venv) lokal di direktori proyek
+  const venvLinux = path.join(__dirname, 'venv', 'bin', 'python3');
+  if (fs.existsSync(venvLinux)) return venvLinux;
+
+  const dotVenvLinux = path.join(__dirname, '.venv', 'bin', 'python3');
+  if (fs.existsSync(dotVenvLinux)) return dotVenvLinux;
+
+  const venvWin = path.join(__dirname, 'venv', 'Scripts', 'python.exe');
+  if (fs.existsSync(venvWin)) return venvWin;
+
+  // 2. Cek instalasi Python khusus di Windows
   const localAppData = process.env.LOCALAPPDATA || 'C:\\Users\\user\\AppData\\Local';
   const customPython = path.join(localAppData, 'Python', 'pythoncore-3.15-64', 'python.exe');
   if (fs.existsSync(customPython)) {
     return customPython;
   }
-  return 'python';
+
+  // 3. Fallback default: di Linux/Ubuntu gunakan 'python3', di Windows gunakan 'python'
+  return process.platform === 'win32' ? 'python' : 'python3';
 }
 
 module.exports = {
