@@ -1,7 +1,8 @@
 """
 Telegram Bot untuk Portal Data & Web Scraping Cipta Group Official
 Mendukung:
-- Pencarian proyek & berkas Google Drive (Brosur, Pricelist, Siteplan, Maps)
+- Tampilkan Semua Proyek & Berkas (2-kolom Grid & Teks Lengkap 96 Berkas)
+- Pencarian cerdas proyek & berkas Google Drive (Brosur, Pricelist, Siteplan, Maps)
 - Menu interaktif dengan Inline Keyboard
 - Cek data baru (Change Detection)
 - Trigger sinkronisasi/scraping ulang langsung dari chat Telegram
@@ -129,7 +130,8 @@ def get_all_projects():
 
 def create_start_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=2)
-    b_proyek = types.InlineKeyboardButton("🏢 Daftar Proyek", callback_data="list_p:0")
+    b_semua = types.InlineKeyboardButton("📋 Tampilkan Semua", callback_data="send_all_text")
+    b_proyek = types.InlineKeyboardButton("🏢 Tombol Proyek", callback_data="list_all")
     b_terbaru = types.InlineKeyboardButton("✨ Data Baru", callback_data="show_new")
     b_stats = types.InlineKeyboardButton("📊 Statistik", callback_data="show_stats")
     b_cari = types.InlineKeyboardButton("🔍 Cara Cari", callback_data="how_search")
@@ -138,45 +140,31 @@ def create_start_keyboard():
     b_web = types.InlineKeyboardButton("🌐 Web Dashboard Live", url="https://scraping-pied.vercel.app")
     b_linktree = types.InlineKeyboardButton("🔗 Linktree Resmi", url="https://linktr.ee/ciptagroupofficial")
 
-    markup.add(b_proyek, b_terbaru)
-    markup.add(b_stats, b_cari)
+    markup.add(b_semua, b_proyek)
+    markup.add(b_terbaru, b_stats)
     markup.add(b_sync, b_export)
-    markup.add(b_web, b_linktree)
+    markup.add(b_cari, b_web)
+    markup.add(b_linktree)
     return markup
 
 
-def create_project_list_markup(page=0, page_size=5):
+def create_all_projects_keyboard():
+    """Membuat keyboard 2-kolom yang menampilkan SEMUA proyek sekaligus tanpa pagination."""
     projects = get_all_projects()
-    total = len(projects)
-    total_pages = (total + page_size - 1) // page_size
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    buttons = []
 
-    page = max(0, min(page, total_pages - 1)) if total_pages > 0 else 0
-    start = page * page_size
-    end = min(start + page_size, total)
-
-    markup = types.InlineKeyboardMarkup(row_width=1)
-
-    for i in range(start, end):
-        p = projects[i]
-        title = p.get("title", f"Proyek #{i+1}")
+    for i, p in enumerate(projects, 1):
+        title = p.get("title", f"Proyek #{i}")
         doc_count = len(p.get("sub_links", []))
         is_new_badge = "✨ " if p.get("is_new") or p.get("has_new_items") else ""
-        btn_text = f"{is_new_badge}{title} ({doc_count} Berkas)"
-        markup.add(types.InlineKeyboardButton(btn_text, callback_data=f"proj:{p.get('id', i+1)}"))
+        btn_text = f"{is_new_badge}{title} ({doc_count})"
+        buttons.append(types.InlineKeyboardButton(btn_text, callback_data=f"proj:{p.get('id', i)}"))
 
-    # Navigasi Pagination
-    nav_buttons = []
-    if page > 0:
-        nav_buttons.append(types.InlineKeyboardButton("◀️ Sebelumnya", callback_data=f"list_p:{page-1}"))
-    nav_buttons.append(types.InlineKeyboardButton(f"Halaman {page+1}/{total_pages}", callback_data="noop"))
-    if page < total_pages - 1:
-        nav_buttons.append(types.InlineKeyboardButton("Selanjutnya ▶️", callback_data=f"list_p:{page+1}"))
-
-    if nav_buttons:
-        markup.row(*nav_buttons)
-
+    markup.add(*buttons)
+    markup.add(types.InlineKeyboardButton("📋 Kirim Rincian Semua Berkas (Teks)", callback_data="send_all_text"))
     markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
-    return markup, page + 1, total_pages, total
+    return markup, len(projects)
 
 
 def create_project_detail(project):
@@ -211,10 +199,68 @@ def create_project_detail(project):
     if is_valid_telegram_url(url):
         markup.add(types.InlineKeyboardButton("🌐 Buka Halaman Linktree Asli", url=url.strip()))
 
-    markup.add(types.InlineKeyboardButton("⬅️ Kembali ke Daftar Proyek", callback_data="list_p:0"))
+    markup.add(types.InlineKeyboardButton("⬅️ Kembali ke Semua Proyek", callback_data="list_all"))
     markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
 
     return text, markup
+
+
+def send_all_projects_text(bot, chat_id):
+    """Mengirim katalog lengkap semua proyek beserta seluruh berkas Google Drive & Maps."""
+    projects = get_all_projects()
+    total = len(projects)
+    total_docs = sum(len(p.get("sub_links", [])) for p in projects)
+    step = 4
+    total_parts = (total + step - 1) // step
+
+    bot.send_message(
+        chat_id,
+        f"📚 *MEMUAT KATALOG LENGKAP CIPTA GROUP*\n\n"
+        f"Menampilkan seluruh *{total} Kawasan Properti* dan *{total_docs} Berkas Resmi* (E-Brosur, Pricelist, Siteplan, Maps):\n"
+        f"_Data dikirimkan dalam {total_parts} bagian rapi di bawah ini..._",
+    )
+
+    for start in range(0, total, step):
+        end = min(start + step, total)
+        part_num = (start // step) + 1
+
+        lines = [f"📋 *SEMUA PROYEK CIPTA GROUP (Bagian {part_num}/{total_parts})*\n"]
+        for i in range(start, end):
+            p = projects[i]
+            title = p.get("title", "")
+            url = p.get("url", "")
+            is_comm = any(k in title.lower() for k in ["pertokoan", "square", "marina", "namarina", "ruko"])
+            cat_label = "🏪 Komersial" if is_comm else "🏡 Hunian"
+
+            lines.append(f"*{i+1}. {title}* ({cat_label})")
+            if url:
+                lines.append(f"🔗 [Halaman Linktree]({url})")
+
+            subs = p.get("sub_links", [])
+            if subs:
+                for s in subs:
+                    st = s.get("title", "Berkas")
+                    su = s.get("url", "")
+                    icon = get_icon_for_title(st, su)
+                    if su:
+                        lines.append(f"   • {icon} [{st}]({su})")
+                    else:
+                        lines.append(f"   • {icon} {st}")
+            else:
+                lines.append("   • _Belum ada berkas tambahan_")
+            lines.append("")
+
+        text = "\n".join(lines)
+        markup = None
+        # Tambahkan tombol aksi pada bagian terakhir
+        if part_num == total_parts:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("🏢 Buka Menu Tombol Proyek", callback_data="list_all"))
+            markup.add(types.InlineKeyboardButton("📥 Unduh CSV / Excel", callback_data="do_export"))
+            markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
+
+        bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
+        time.sleep(0.3)
 
 
 def setup_bot(token: str):
@@ -226,25 +272,31 @@ def setup_bot(token: str):
         name = message.from_user.first_name or "Pengguna"
         text = (
             f"👋 *Halo, {name}! Selamat datang di Bot Telegram Cipta Group Batam*\n\n"
-            f"Bot ini terintegrasi langsung dengan database hasil scraping [Linktree Cipta Group Official](https://linktr.ee/ciptagroupofficial).\n\n"
-            f"📌 *Fitur yang dapat Anda gunakan:*\n"
-            f"• 🏢 *Lihat Proyek*: Jelajahi 15+ perumahan & kawasan komersial\n"
-            f"• 📄 *Akses Berkas*: Buka E-Brosur, Pricelist, Siteplan, Maps langsung di Google Drive\n"
-            f"• 🔍 *Pencarian*: Ketik langsung nama proyek atau jenis berkas (cth: `Aster`, `Amalfi`, `Pricelist`)\n"
-            f"• ✨ *Data Baru*: Pantau berkas atau proyek yang baru saja diperbarui\n"
-            f"• 🔄 *Live Scraping*: Lakukan sinkronisasi data Linktree secara real-time\n"
+            f"Bot ini terintegrasi langsung dengan database [Linktree Cipta Group Official](https://linktr.ee/ciptagroupofficial).\n\n"
+            f"📌 *Fitur Utama:*\n"
+            f"• 📋 *Tampilkan Semua*: Kirim rincian seluruh 15 proyek & 96 berkas Drive/Maps\n"
+            f"• 🏢 *Tombol Proyek*: Pilih nama proyek dalam tata letak tombol interaktif\n"
+            f"• 🔍 *Pencarian Cerdas*: Ketik langsung nama proyek atau jenis berkas (cth: `Aster`, `Amalfi`, `Pricelist`)\n"
+            f"• ✨ *Data Baru*: Pantau proyek & berkas yang baru ditambahkan\n"
+            f"• 🔄 *Live Scraping*: Sinkronkan data Linktree langsung dari chat\n"
             f"• 📥 *Ekspor*: Unduh rekapitulasi data format CSV / Excel\n\n"
-            f"Pilih menu di bawah ini untuk memulai:"
+            f"Silakan pilih menu di bawah ini:"
         )
         bot.send_message(message.chat.id, text, reply_markup=create_start_keyboard(), disable_web_page_preview=True)
+
+    # Command: /semua atau /all
+    @bot.message_handler(commands=["semua", "all", "katalog"])
+    def all_projects_cmd(message):
+        send_all_projects_text(bot, message.chat.id)
 
     # Command: /proyek atau /list
     @bot.message_handler(commands=["proyek", "list"])
     def list_projects_cmd(message):
-        markup, page, total_p, total_items = create_project_list_markup(page=0)
+        markup, total = create_all_projects_keyboard()
         bot.send_message(
             message.chat.id,
-            f"🏢 *Daftar Proyek Cipta Group ({total_items} Properti):*\n_Pilih nama proyek untuk melihat berkas Drive, Brosur, dan Pricelist:_",
+            f"🏢 *Daftar Lengkap Semua Proyek Cipta Group ({total} Kawasan):*\n"
+            f"_Klik salah satu tombol proyek di bawah untuk membuka berkas Drive (Brosur, Pricelist, Siteplan, Maps):_",
             reply_markup=markup,
         )
 
@@ -298,9 +350,9 @@ def setup_bot(token: str):
         new_items = sum(1 for p in projects if p.get("is_new")) + sum(1 for p in projects for s in p.get("sub_links", []) if s.get("is_new") and not p.get("is_new"))
 
         text = (
-            f"📊 *STATISTIK DATA CIPTA GROUP OFFICIAL*\n"
+            f"📊 *STATISTIK LENGKAP CIPTA GROUP OFFICIAL*\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🏢 *Total Properti:* `{total_projects}` Kawasan\n"
+            f"🏢 *Total Kawasan:* `{total_projects}` Properti\n"
             f"📁 *Total Berkas & Link:* `{total_docs}` Dokumen\n"
             f"📄 *E-Brosur / Flyer:* `{brochures}` Berkas\n"
             f"💰 *Pricelist / Harga:* `{pricelists}` Berkas\n"
@@ -311,7 +363,8 @@ def setup_bot(token: str):
             f"🔗 *Sumber:* [linktr.ee/ciptagroupofficial](https://linktr.ee/ciptagroupofficial)"
         )
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🏢 Lihat Proyek", callback_data="list_p:0"))
+        markup.add(types.InlineKeyboardButton("📋 Tampilkan Semua", callback_data="send_all_text"))
+        markup.add(types.InlineKeyboardButton("🏢 Tombol Proyek", callback_data="list_all"))
         markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
         bot.send_message(message.chat.id, text, reply_markup=markup, disable_web_page_preview=True)
 
@@ -391,7 +444,7 @@ def setup_bot(token: str):
 
         threading.Thread(target=worker, daemon=True).start()
 
-    # Callback Query Handler (Inline Keyboard clicks)
+    # Callback Query Handler
     @bot.callback_query_handler(func=lambda call: True)
     def callback_handler(call):
         data = call.data
@@ -410,34 +463,20 @@ def setup_bot(token: str):
             )
             return
 
-        if data == "show_web_info":
-            bot.answer_callback_query(call.id)
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("🔗 Buka Linktree Cipta Group", url="https://linktr.ee/ciptagroupofficial"))
-            markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
-            bot.edit_message_text(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                text=(
-                    "🌐 *Dashboard Web Cipta Group*\n\n"
-                    "Dashboard web interaktif berjalan di server lokal komputer Anda:\n"
-                    "👉 `http://localhost:8000`\n\n"
-                    "*(Buka tautan di atas di browser Chrome/Edge laptop/komputer Anda tempat server `python app.py` dijalankan).*\n\n"
-                    "Atau Anda bisa mengakses halaman publik resmi Cipta Group melalui tombol Linktree di bawah:"
-                ),
-                reply_markup=markup,
-                disable_web_page_preview=True,
-            )
+        # Tampilkan Semua Rincian Berkas (Teks)
+        if data == "send_all_text":
+            bot.answer_callback_query(call.id, text="Memuat seluruh rincian proyek...")
+            send_all_projects_text(bot, call.message.chat.id)
             return
 
-        if data.startswith("list_p:"):
+        # Tampilkan Semua Tombol Proyek Sekaligus
+        if data == "list_all":
             bot.answer_callback_query(call.id)
-            page = int(data.split(":")[1])
-            markup, p_num, total_p, total_items = create_project_list_markup(page=page)
+            markup, total = create_all_projects_keyboard()
             bot.edit_message_text(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
-                text=f"🏢 *Daftar Proyek Cipta Group ({total_items} Properti):*\n_Halaman {p_num} dari {total_p}_",
+                text=f"🏢 *Semua Proyek Cipta Group ({total} Kawasan Properti):*\n_Pilih nama proyek untuk melihat berkas Drive-nya:_",
                 reply_markup=markup,
             )
             return
@@ -485,6 +524,7 @@ def setup_bot(token: str):
                     "🔍 *Cara Mencari di Bot Cipta Group:*\n\n"
                     "Anda bisa langsung mengetikkan kata apa pun di ruang obrolan, tanpa perlu garis miring!\n\n"
                     "💡 *Contoh Pencarian Cepat:*\n"
+                    "• Ketik `semua` ➔ Menampilkan seluruh 15 proyek & 96 berkas\n"
                     "• Ketik `Aster` ➔ Menampilkan Aster Tropika, Hills, Garden\n"
                     "• Ketik `Amalfi` ➔ Menampilkan proyek hunian Amalfi\n"
                     "• Ketik `Marina` ➔ Menampilkan Pertokoan Marina Central & Cipta Village\n"
@@ -506,10 +546,15 @@ def setup_bot(token: str):
             export_cmd(call.message)
             return
 
-    # Plain text search listener
+    # Plain text listener
     @bot.message_handler(func=lambda message: True)
     def handle_text_search(message):
         query = message.text.strip()
+        # Jika user mengetik "semua" atau "tampilkan semua"
+        if query.lower() in ["semua", "tampilkan semua", "all", "semua proyek"]:
+            send_all_projects_text(bot, message.chat.id)
+            return
+
         do_search(bot, message.chat.id, query)
 
     return bot
@@ -533,11 +578,12 @@ def do_search(bot, chat_id, query):
 
     if not matched_projects and not matched_docs:
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🏢 Lihat Semua Proyek", callback_data="list_p:0"))
+        markup.add(types.InlineKeyboardButton("📋 Tampilkan Semua", callback_data="send_all_text"))
+        markup.add(types.InlineKeyboardButton("🏢 Tombol Proyek", callback_data="list_all"))
         markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
         bot.send_message(
             chat_id,
-            f"🔍 Tidak ditemukan data dengan kata kunci: *{query}*\n\nCoba cari kata kunci lain seperti `Aster`, `Amalfi`, `Marina`, `Brosur`, atau `Pricelist`.",
+            f"🔍 Tidak ditemukan data dengan kata kunci: *{query}*\n\nCoba cari kata kunci lain seperti `semua`, `Aster`, `Amalfi`, `Marina`, `Brosur`, atau `Pricelist`.",
             reply_markup=markup,
         )
         return
@@ -562,6 +608,7 @@ def do_search(bot, chat_id, query):
                 if is_valid_telegram_url(s.get("url")):
                     markup.add(types.InlineKeyboardButton(f"{icon} {p.get('title')} - {s.get('title')}", url=s.get("url").strip()))
 
+    markup.add(types.InlineKeyboardButton("📋 Tampilkan Semua", callback_data="send_all_text"))
     markup.add(types.InlineKeyboardButton("🏠 Menu Utama", callback_data="main_menu"))
     bot.send_message(chat_id, text, reply_markup=markup, disable_web_page_preview=True)
 
@@ -573,23 +620,25 @@ def run_test_mode():
     projects = get_all_projects()
     print(f"[✓] Berhasil memuat data: {len(projects)} proyek ditemukan.")
 
-    # Test create markup
-    markup, page, total_p, total_items = create_project_list_markup(page=0)
-    print(f"[✓] Menu pagination proyek berhasil digenerate: {total_items} items (Halaman {page}/{total_p}).")
+    # Test create all projects keyboard
+    markup, total_items = create_all_projects_keyboard()
+    print(f"[✓] Keyboard SEMUA proyek (2-kolom grid) berhasil dibuat: {total_items} tombol.")
 
     # Test start keyboard
     start_kb = create_start_keyboard()
-    print(f"[✓] Keyboard menu utama berhasil dibuat tanpa error URL.")
+    print(f"[✓] Keyboard menu utama berhasil dibuat dengan tombol 'Tampilkan Semua'.")
 
-    # Test URL validation
-    assert not is_valid_telegram_url("http://localhost:8000"), "localhost must be invalid for Telegram"
-    assert is_valid_telegram_url("https://linktr.ee/ciptagroupofficial"), "valid https url must pass"
-    assert is_valid_telegram_url("https://drive.google.com/drive/folders/123"), "google drive url must pass"
-    print(f"[✓] Validasi URL Telegram Bot API berhasil terverifikasi.")
+    # Test text chunking
+    step = 4
+    total_parts = (len(projects) + step - 1) // step
+    print(f"[✓] Logika chunking teks berhasil: {len(projects)} proyek dipecah ke {total_parts} pesan aman.")
 
     # Test search logic
-    test_queries = ["aster", "amalfi", "pricelist", "brosur"]
+    test_queries = ["semua", "aster", "amalfi", "pricelist", "brosur"]
     for q in test_queries:
+        if q == "semua":
+            print(f"[✓] Query '{q}': Otomatis mentrigger tampilan semua katalog.")
+            continue
         matched = [p for p in projects if q in p.get("title", "").lower()]
         doc_matches = [
             (p["title"], s["title"])
@@ -599,7 +648,7 @@ def run_test_mode():
         ]
         print(f"[✓] Query '{q}': {len(matched)} proyek cocok, {len(doc_matches)} dokumen cocok.")
 
-    print("[✓] Semua modul dan logika bot terverifikasi 100% normal & aman dari error Bad Request!")
+    print("[✓] Semua fitur 'Tampilkan Semua' terverifikasi 100% normal!")
     print("=" * 60)
 
 

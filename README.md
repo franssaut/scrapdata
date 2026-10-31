@@ -27,8 +27,9 @@ Bot Telegram interaktif yang memungkinkan pengguna mengakses seluruh data proper
 
 | Perintah | Fungsi |
 |----------|--------|
+| `/semua`, `/all` | **Tampilkan Semua**: Mengirim rincian lengkap 15 proyek & seluruh berkas Drive/Maps |
+| `/proyek`, `/list` | Melihat daftar tombol 2-kolom seluruh kawasan properti Cipta Group |
 | `/start`, `/help` | Menampilkan pesan sambutan & menu tombol utama |
-| `/proyek`, `/list` | Melihat daftar seluruh kawasan properti Cipta Group |
 | `/cari <keyword>` | Mencari proyek atau dokumen spesifik |
 | `/terbaru`, `/new` | Menampilkan proyek & dokumen baru yang terdeteksi |
 | `/stats` | Melihat statistik KPI proyek & berkas |
