@@ -1,0 +1,16 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables & secrets
+.env
+*.local
+
+# Editor directories
+.vscode/
+.idea/
+
+# Temporary files
+*.log
+ciptagroup_hasil.*

@@ -1,0 +1,49 @@
+[
+  {
+    "id": "hist_1793419942",
+    "timestamp": "2026-10-31 11:12:22",
+    "type": "sync_no_change",
+    "title": "Sinkronisasi Linktree: Tidak Ada Perubahan",
+    "new_projects_count": 0,
+    "new_documents_count": 0,
+    "items": [
+      "Semua data sudah up-to-date dengan Linktree."
+    ]
+  },
+  {
+    "id": "hist_1793419797",
+    "timestamp": "2026-10-31 11:09:57",
+    "type": "manual_add_doc",
+    "title": "Dokumen Baru Ditambahkan ke Cipta Grand Harmony (Proyek Baru)",
+    "new_projects_count": 0,
+    "new_documents_count": 1,
+    "items": [
+      "Cipta Grand Harmony (Proyek Baru): Siteplan Kawasan Harmony (https://drive.google.com/test-siteplan)"
+    ]
+  },
+  {
+    "id": "hist_1793419795",
+    "timestamp": "2026-10-31 11:09:55",
+    "type": "manual_add_project",
+    "title": "Proyek Baru Ditambahkan: Cipta Grand Harmony (Proyek Baru)",
+    "new_projects_count": 1,
+    "new_documents_count": 2,
+    "items": [
+      "Proyek Baru Ditambahkan Manual: Cipta Grand Harmony (Proyek Baru)",
+      "Berkas: E-Brosur 2026 (https://drive.google.com/test-brosur)",
+      "Berkas: Pricelist Tahap 1 (https://drive.google.com/test-price)"
+    ]
+  },
+  {
+    "id": "init_1",
+    "timestamp": "2026-10-31 10:46:38",
+    "type": "initial_sync",
+    "title": "Sinkronisasi Awal Data Linktree",
+    "new_projects_count": 15,
+    "new_documents_count": 96,
+    "items": [
+      "15 Kawasan Properti berhasil diintegrasikan",
+      "96 Berkas Google Drive (E-Brosur, Pricelist, Siteplan, Maps) berhasil dipetakan"
+    ]
+  }
+]
