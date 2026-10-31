@@ -135,7 +135,7 @@ def create_start_keyboard():
     b_cari = types.InlineKeyboardButton("🔍 Cara Cari", callback_data="how_search")
     b_sync = types.InlineKeyboardButton("🔄 Scrape / Sync", callback_data="do_sync")
     b_export = types.InlineKeyboardButton("📥 Unduh CSV/Excel", callback_data="do_export")
-    b_web = types.InlineKeyboardButton("🌐 Info Web Dashboard", callback_data="show_web_info")
+    b_web = types.InlineKeyboardButton("🌐 Web Dashboard Live", url="https://scraping-pied.vercel.app")
     b_linktree = types.InlineKeyboardButton("🔗 Linktree Resmi", url="https://linktr.ee/ciptagroupofficial")
 
     markup.add(b_proyek, b_terbaru)

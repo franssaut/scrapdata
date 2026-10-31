@@ -73,14 +73,23 @@ python bot.py --test
 
 ---
 
-## 🌐 Dashboard Web Lokal (`app.py`)
+## 🌐 Dashboard Web Live (Production di Vercel)
 
-Selain Bot Telegram, dashboard web lokal juga tersedia:
+Website telah berhasil di-deploy secara publik di Vercel:
+👉 **[https://scraping-pied.vercel.app](https://scraping-pied.vercel.app)**
+
+Dashboard dapat diakses langsung secara global melalui HP, tablet, maupun komputer.
+
+---
+
+## 💻 Menjalankan Server Lokal (`app.py`)
+
+Selain versi online di Vercel, server lokal juga dapat dijalankan:
 
 ```bash
 python app.py
 ```
-Akses di browser: 👉 **[http://localhost:8000](http://localhost:8000)**
+Akses di browser lokal: 👉 **[http://localhost:8000](http://localhost:8000)**
 
 ---
 
